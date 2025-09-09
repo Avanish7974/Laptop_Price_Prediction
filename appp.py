@@ -4,138 +4,173 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from pathlib import Path
 
-# ===================== Page Configuration =====================
+# ==================== PAGE CONFIG ====================
 st.set_page_config(
-    page_title="💻 Laptop Price Predictor",
+    page_title="💻 Advanced Laptop Price Predictor",
     page_icon="💻",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# ===================== Custom CSS =====================
+# ==================== CUSTOM CSS ====================
 st.markdown("""
     <style>
-        /* Main App Background */
-        .main {
-            background-color: #f8fafc;
-            padding: 0;
-            margin: 0;
+        /* Global Font & Body Styling */
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #212529;
         }
 
-        /* Title Styling */
-        h1 {
-            color: #0F4C81;
-            font-weight: 700;
-            font-size: 36px;
+        /* Sidebar Styling */
+        [data-testid="stSidebar"] {
+            background: linear-gradient(135deg, #0077b6, #00b4d8);
+            color: white;
+        }
+
+        [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+            color: white;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        /* Header Title Styling */
+        .main-title {
+            text-align: center;
+            font-size: 38px;
+            font-weight: 800;
+            color: #0077b6;
+            margin-bottom: 5px;
         }
 
         /* Subtitle Styling */
-        h2, h3 {
-            color: #1B1B1B;
-            font-weight: 600;
+        .sub-title {
+            text-align: center;
+            font-size: 18px;
+            color: #495057;
+            margin-bottom: 25px;
+        }
+
+        /* Prediction Result Card */
+        .prediction-card {
+            background: rgba(255, 255, 255, 0.85);
+            padding: 25px;
+            border-radius: 18px;
+            box-shadow: 0 4px 15px rgba(0, 119, 182, 0.3);
+            text-align: center;
+            transition: transform 0.3s ease-in-out;
+        }
+        .prediction-card:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 180, 216, 0.5);
         }
 
         /* Buttons */
         div.stButton > button {
-            background-color: #0F4C81;
+            background-color: #0077b6;
             color: white;
-            border-radius: 8px;
-            padding: 0.6rem 1.2rem;
+            padding: 0.6em 1em;
+            font-size: 1rem;
+            border-radius: 10px;
             border: none;
-            font-size: 16px;
-            font-weight: 600;
-            transition: 0.3s ease-in-out;
+            font-weight: bold;
+            transition: all 0.3s ease-in-out;
         }
         div.stButton > button:hover {
-            background-color: #0b3b66;
-            transform: scale(1.03);
+            background-color: #00b4d8;
+            color: white;
+            transform: scale(1.05);
         }
 
-        /* Cards / Containers */
-        .stMarkdown, .stDataFrame, .stPlotlyChart {
+        /* Chart Card Styling */
+        .chart-card {
             background-color: white;
-            border-radius: 12px;
             padding: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border-radius: 16px;
+            box-shadow: 0px 4px 14px rgba(0,0,0,0.08);
         }
 
-        /* Input Fields */
-        .stNumberInput, .stSelectbox {
+        /* Table Styling */
+        .dataframe {
+            border: 1px solid #dee2e6;
             border-radius: 8px;
+            background-color: white;
         }
-
-        /* Footer Hide */
-        footer {visibility: hidden;}
-        #MainMenu {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
-# ===================== Load Dataset =====================
-df = pickle.load(open('df.pkl', 'rb'))
+# ==================== LOAD MODEL ====================
+model_path = Path("laptop_price_model.pkl")
+df_path = Path("df.pkl")
 
-# ===================== Sidebar =====================
-st.sidebar.image("https://cdn-icons-png.flaticon.com/512/2920/2920244.png", width=120)
-st.sidebar.title("Laptop Price Predictor")
-st.sidebar.markdown("### Configure your laptop specs")
+if not model_path.exists() or not df_path.exists():
+    st.error("❌ Required model or dataset file not found. Please check the files.")
+    st.stop()
 
-company = st.sidebar.selectbox("Brand", df['Company'].unique())
-laptop_type = st.sidebar.selectbox("Laptop Type", df['TypeName'].unique())
+model = pickle.load(open(model_path, "rb"))
+df = pickle.load(open(df_path, "rb"))
+
+# ==================== HEADER ====================
+st.markdown("<h1 class='main-title'>💻 Advanced Laptop Price Predictor</h1>", unsafe_allow_html=True)
+st.markdown("<p class='sub-title'>Predict laptop prices with high accuracy using Machine Learning</p>", unsafe_allow_html=True)
+
+# ==================== SIDEBAR ====================
+st.sidebar.title("⚙️ Input Specifications")
+company = st.sidebar.selectbox("Select Company", df['Company'].unique())
+type_name = st.sidebar.selectbox("Select Type", df['TypeName'].unique())
 ram = st.sidebar.selectbox("RAM (GB)", sorted(df['Ram'].unique()))
-weight = st.sidebar.number_input("Weight (kg)", min_value=0.5, max_value=5.0, value=2.0, step=0.1)
-touchscreen = st.sidebar.selectbox("Touchscreen", ['Yes', 'No'])
-ips = st.sidebar.selectbox("IPS Display", ['Yes', 'No'])
-screen_size = st.sidebar.number_input("Screen Size (inches)", min_value=10.0, max_value=18.0, value=15.6, step=0.1)
-resolution = st.sidebar.selectbox("Screen Resolution", df['Resolution'].unique())
+weight = st.sidebar.slider("Weight (Kg)", 0.5, 5.0, 2.0)
+touchscreen = st.sidebar.selectbox("Touchscreen", ["Yes", "No"])
+ips = st.sidebar.selectbox("IPS Display", ["Yes", "No"])
+ppi = st.sidebar.slider("PPI", 50, 400, 150)
 cpu = st.sidebar.selectbox("CPU", df['Cpu brand'].unique())
 hdd = st.sidebar.selectbox("HDD (GB)", sorted(df['Hdd'].unique()))
 ssd = st.sidebar.selectbox("SSD (GB)", sorted(df['Ssd'].unique()))
 gpu = st.sidebar.selectbox("GPU Brand", df['Gpu brand'].unique())
 os = st.sidebar.selectbox("Operating System", df['os'].unique())
 
-# ===================== Prediction =====================
+# ==================== PREDICTION ====================
 if st.sidebar.button("💡 Predict Price"):
-    model = pickle.load(open('model.pkl', 'rb'))
+    # Convert categorical values
+    touchscreen = 1 if touchscreen == "Yes" else 0
+    ips = 1 if ips == "Yes" else 0
 
-    touchscreen = 1 if touchscreen == 'Yes' else 0
-    ips = 1 if ips == 'Yes' else 0
+    query = np.array([[company, type_name, ram, weight, touchscreen, ips, ppi, cpu, hdd, ssd, gpu, os]])
+    query_df = pd.DataFrame(query, columns=["Company", "TypeName", "Ram", "Weight", "Touchscreen", "IPS", "PPI", "Cpu brand", "Hdd", "Ssd", "Gpu brand", "os"])
 
-    input_features = np.array([company, laptop_type, ram, weight, touchscreen,
-                               ips, screen_size, resolution, cpu, hdd, ssd, gpu, os], dtype=object)
-    
-    encoded_df = pd.DataFrame([input_features], columns=['Company','TypeName','Ram','Weight',
-                                                          'Touchscreen','Ips','ScreenSize',
-                                                          'Resolution','Cpu brand','Hdd',
-                                                          'Ssd','Gpu brand','os'])
-    
-    prediction = model.predict(encoded_df)
+    # Predict price
+    price = np.exp(model.predict(query_df)[0])
+
     st.markdown(f"""
-        <div style="background-color:#0F4C81;padding:18px;border-radius:10px;text-align:center;">
-            <h2 style="color:white;">💰 Predicted Price: ₹ {int(prediction[0]):,}</h2>
+        <div class="prediction-card">
+            <h3>💰 Estimated Laptop Price:</h3>
+            <h1 style="color:#0077b6;">₹ {int(price):,}</h1>
+            <p style="color:#495057;">Based on your selected configuration</p>
         </div>
     """, unsafe_allow_html=True)
 
-# ===================== Dashboard Layout =====================
-st.markdown("---")
-st.subheader("📊 Laptop Dataset Insights")
+# ==================== DATA VISUALIZATION ====================
+st.subheader("📊 Data Insights")
 
-# ---- Top Brands ----
 col1, col2 = st.columns(2)
+
 with col1:
-    brand_counts = df['Company'].value_counts().reset_index()
-    brand_counts.columns = ['Brand', 'Count']
-    fig1 = px.bar(brand_counts, x="Brand", y="Count", title="Top Laptop Brands",
-                  color="Brand", template="plotly_white")
+    st.markdown("<div class='chart-card'>", unsafe_allow_html=True)
+    fig1 = px.histogram(df, x="Company", color="Company", title="Laptop Distribution by Company")
     st.plotly_chart(fig1, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# ---- Laptop Type Pie Chart ----
 with col2:
-    type_counts = df['TypeName'].value_counts().reset_index()
-    type_counts.columns = ['Type', 'Count']
-    fig2 = px.pie(type_counts, values="Count", names="Type", title="Laptop Types Distribution",
-                  hole=0.4, color_discrete_sequence=px.colors.sequential.Blues)
+    st.markdown("<div class='chart-card'>", unsafe_allow_html=True)
+    fig2 = px.pie(df, names="TypeName", title="Laptop Types Distribution")
     st.plotly_chart(fig2, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# ---- RAM vs Price ----
-st.markdown("### 💾 RAM vs Price")
-fig3 = px.box(df, x="Ram", y="Price", color="Ram", template="plotly_white")
+st.markdown("<br>", unsafe_allow_html=True)
+
+st.markdown("<div class='chart-card'>", unsafe_allow_html=True)
+fig3 = px.box(df, x="Company", y="Price", color="Company", title="Price Range by Company")
 st.plotly_chart(fig3, use_container_width=True)
+st.markdown("</div>", unsafe_allow_html=True)
