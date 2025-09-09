@@ -1,202 +1,167 @@
 import streamlit as st
 import pickle
-import pandas as pd
 import numpy as np
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from pathlib import Path
+from streamlit.components.v1 import html as st_html
 
-# ---------------------------
-# Helpers
-# ---------------------------
-def load_pickle_safe(path):
-    p = Path(path)
-    if not p.exists():
-        st.error(f"Required file not found: `{path}` — make sure it's in the app folder.")
-        st.stop()
-    return pickle.load(open(p, "rb"))
+# ===================== Page Configuration =====================
+st.set_page_config(
+    page_title="Laptop Price Predictor",
+    page_icon="💻",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-def calc_ppi(resolution, screen_size):
-    X_res, Y_res = map(int, resolution.split('x'))
-    return ((X_res**2 + Y_res**2)**0.5) / screen_size
+# ===================== Particle Background (tsParticles) =====================
+# This component injects a full-screen particle canvas behind the app content.
+PARTICLE_HTML = """
+<div id="tsparticles" style="position:fixed; top:0; left:0; width:100%; height:100vh; z-index:0; pointer-events:none;"></div>
+<script src="https://cdn.jsdelivr.net/npm/tsparticles@2.10.1/tsparticles.bundle.min.js"></script>
+<script>
+  (async () => {
+    await tsParticles.load("tsparticles", {
+      fullScreen: { enable: false },
+      fpsLimit: 60,
+      detectRetina: true,
+      background: { color: "transparent" },
+      particles: {
+        number: { value: 90, density: { enable: true, area: 1200 } },
+        color: { value: ["#00f5ff", "#7c4dff", "#00e676", "#ff6b6b"] },
+        shape: { type: "circle" },
+        opacity: {
+          value: 0.6,
+          random: { enable: true, minimumValue: 0.2 },
+          anim: { enable: true, speed: 0.8, opacity_min: 0.2, sync: false }
+        },
+        size: {
+          value: { min: 1, max: 6 },
+          random: true,
+          anim: { enable: true, speed: 3, size_min: 0.5, sync: false }
+        },
+        links: {
+          enable: true,
+          distance: 160,
+          color: "#00f5ff",
+          opacity: 0.12,
+          width: 1
+        },
+        move: {
+          enable: true,
+          speed: 0.8,
+          direction: "none",
+          random: true,
+          straight: false,
+          out_mode: "out",
+          attract: { enable: false, rotateX: 600, rotateY: 1200 }
+        }
+      },
+      interactivity: {
+        detectsOn: "canvas",
+        events: {
+          onHover: { enable: true, mode: "repulse" },
+          onClick: { enable: true, mode: "push" },
+          resize: true
+        },
+        modes: {
+          grab: { distance: 400, links: { opacity: 0.5 } },
+          bubble: { distance: 400, size: 8, duration: 2, opacity: 0.8 },
+          repulse: { distance: 120, duration: 0.6 },
+          push: { quantity: 4 },
+          remove: { quantity: 2 }
+        }
+      },
+      retina_detect: true
+    });
+  })();
+</script>
+"""
 
-def predict_all(models, query_df):
-    preds = {}
-    for name, model in models.items():
-        try:
-            val = model.predict(query_df)[0]
-        except Exception as e:
-            st.warning(f"Prediction failed for {name}: {str(e)}")
-            val = np.nan
-        if not pd.isna(val):
-            try:
-                price = int(np.exp(val))
-            except Exception:
-                price = int(val)
-        else:
-            price = None
-        preds[name] = price
-    return preds
+# Render the particle HTML (full width). Use height small so component doesn't change layout.
+st_html(PARTICLE_HTML, height=1)
 
-def mk_metric_card(title, value, subtitle=""):
-    st.markdown(
-        f"""
-        <div class="card-metric">
-            <div class="card-metric-title">{title}</div>
-            <div class="card-metric-value">{value}</div>
-            <div class="card-metric-sub">{subtitle}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-# ---------------------------
-# Page Config
-# ---------------------------
-st.set_page_config(page_title="Laptop Price AI", page_icon="💻", layout="wide")
-
-# ---------------------------
-# Custom CSS Styling
-# ---------------------------
+# ===================== Custom Styling (app content sits above particles) =====================
 st.markdown(
     """
     <style>
-    :root {
-      --bg-color: #F5F6F9;
-      --card-bg: #FFFFFF;
-      --primary: #0055CC;
-      --accent: #003366;
-      --text-color: #1C1C1C;
-      --muted: #6B7280;
-      --card-radius: 14px;
-      --shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+    /* Ensure app content is above the particle canvas */
+    .stApp {
+        background: linear-gradient(135deg, rgba(15,32,39,0.85), rgba(32,58,67,0.85));
+        color: #ffffff;
+        position: relative;
+        z-index: 1;
+        font-family: 'Segoe UI', Roboto, sans-serif;
     }
-    body { background: var(--bg-color); }
-    .topbar {
-        position: sticky;
-        top: 0;
-        z-index: 100;
-        background: var(--card-bg);
-        padding: 14px 24px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        box-shadow: var(--shadow);
-        border-radius: 0 0 12px 12px;
-    }
-    .brand {
-        font-weight: 700;
-        color: var(--accent);
-        font-size: 22px;
-        display: flex;
-        gap: 10px;
-        align-items: center;
-    }
-    .nav-container {
-        display: flex;
-        gap: 12px;
-    }
-    .nav-btn {
-        padding: 8px 18px;
-        border-radius: 8px;
-        background: transparent;
-        border: 1px solid transparent;
-        font-weight: 600;
-        color: var(--muted);
-        cursor: pointer;
-        transition: all 0.2s ease-in-out;
-    }
-    .nav-btn:hover {
-        background: #eaf1ff;
-        color: var(--primary);
-    }
-    .nav-btn.active {
-        background: var(--primary);
-        color: #fff;
-        border: 1px solid var(--primary);
-        box-shadow: 0 3px 10px rgba(0,85,204,0.2);
-    }
-    .main-card {
-        background: var(--card-bg);
-        border-radius: var(--card-radius);
-        padding: 20px;
-        box-shadow: var(--shadow);
-        margin-bottom: 16px;
-    }
-    .card-metric {
-        padding: 16px;
+
+    /* Card / glass effect for content */
+    .glass-card {
+        background: rgba(255,255,255,0.03);
         border-radius: 12px;
-        background: var(--card-bg);
-        box-shadow: var(--shadow);
+        padding: 14px;
+        border: 1px solid rgba(255,255,255,0.06);
+        box-shadow: 0 8px 30px rgba(2,6,23,0.6);
     }
-    .card-metric-title {
-        color: var(--muted);
-        font-size: 13px;
-    }
-    .card-metric-value {
-        font-size: 22px;
-        font-weight: 700;
-        margin-top: 6px;
-        color: var(--primary);
-    }
-    .card-metric-sub {
-        color: var(--muted);
-        font-size: 12px;
-        margin-top: 4px;
-    }
-    .model-card {
-        padding: 16px;
-        border-radius: 12px;
-        background: var(--card-bg);
-        box-shadow: var(--shadow);
-        margin-bottom: 16px;
-    }
-    .model-title {
-        font-weight: 700;
-        color: var(--accent);
-    }
-    .badge {
-        display: inline-block;
-        font-size: 11px;
-        padding: 6px 10px;
-        border-radius: 999px;
-        background: var(--primary);
-        color: #fff;
+
+    /* Buttons */
+    .stButton>button {
+        background: linear-gradient(135deg, #00d4ff, #0066ff) !important;
+        color: white !important;
+        border-radius: 10px;
+        padding: 10px 18px;
         font-weight: 600;
+        box-shadow: 0 6px 20px rgba(0, 212, 255, 0.12);
     }
-    .model-grid {
-        display: grid;
-        grid-template-columns: repeat(3,1fr);
-        gap: 16px;
+    .stButton>button:hover {
+        transform: scale(1.03);
     }
-    @media (max-width: 1100px) {
-      .model-grid { grid-template-columns: repeat(1,1fr); }
+
+    /* Metric style */
+    [data-testid="stMetricValue"] {
+        color: #00f5ff !important;
+        font-weight: 700;
     }
+
+    /* DataFrame card */
+    .stDataFrame {
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    /* Sidebar tweaks */
+    [data-testid="stSidebar"] {
+        background: rgba(4,8,15,0.9);
+        border-right: 1px solid rgba(255,255,255,0.05);
+    }
+
+    /* Reduce top padding so header feels closer */
+    header ~ div { padding-top: 10px; }
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
-# ---------------------------
-# Load data & models
-# ---------------------------
-df = load_pickle_safe("df.pkl")
+# ===================== Load Data & Models =====================
+@st.cache_data
+def load_data():
+    df = pickle.load(open('df.pkl', 'rb'))
+    models = {
+        "Linear Regression": pickle.load(open("lin_reg.pkl", "rb")),
+        "Ridge Regression": pickle.load(open("Ridge_regre.pkl", "rb")),
+        "Lasso Regression": pickle.load(open("lasso_reg.pkl", "rb")),
+        "KNN Regressor": pickle.load(open("KNN_reg.pkl", "rb")),
+        "Decision Tree": pickle.load(open("Decision_tree.pkl", "rb")),
+        "SVM Regressor": pickle.load(open("SVM_reg.pkl", "rb")),
+        "Random Forest": pickle.load(open("Random_forest.pkl", "rb")),
+        "Extra Trees": pickle.load(open("Extra_tree.pkl", "rb")),
+        "AdaBoost": pickle.load(open("Ada_boost.pkl", "rb")),
+        "Gradient Boost": pickle.load(open("Gradient_boost.pkl", "rb")),
+        "XGBoost": pickle.load(open("XG_boost.pkl", "rb"))
+    }
+    return df, models
 
-models = {
-    "Linear Regression": load_pickle_safe("lin_reg.pkl"),
-    "Ridge Regression": load_pickle_safe("Ridge_regre.pkl"),
-    "Lasso Regression": load_pickle_safe("lasso_reg.pkl"),
-    "KNN Regressor": load_pickle_safe("KNN_reg.pkl"),
-    "Decision Tree": load_pickle_safe("Decision_tree.pkl"),
-    "SVM Regressor": load_pickle_safe("SVM_reg.pkl"),
-    "Random Forest": load_pickle_safe("Random_forest.pkl"),
-    "Extra Trees": load_pickle_safe("Extra_tree.pkl"),
-    "AdaBoost": load_pickle_safe("Ada_boost.pkl"),
-    "Gradient Boost": load_pickle_safe("Gradient_boost.pkl"),
-    "XGBoost": load_pickle_safe("XG_boost.pkl")
-}
+df, models = load_data()
 
-# accuracies (static for now)
 accuracies = {
     "Linear Regression": {"R2": 0.78, "MAE": 24000},
     "Ridge Regression": {"R2": 0.80, "MAE": 23000},
@@ -211,174 +176,163 @@ accuracies = {
     "XGBoost": {"R2": 0.90, "MAE": 14000}
 }
 
-model_categories = {
-    "Ensemble Methods": ["Random Forest", "Extra Trees", "XGBoost", "Gradient Boost", "AdaBoost"],
-    "Linear Methods": ["Linear Regression", "Ridge Regression", "Lasso Regression"],
-    "Other Methods": ["KNN Regressor", "SVM Regressor"]
-}
+# ===================== Sidebar Navigation =====================
+st.sidebar.title("🚀 Navigation")
+page = st.sidebar.radio("Choose Page", ["📊 Dashboard", "🔮 Price Predictor", "📈 Model Insights"])
 
-# ---------------------------
-# Top Navigation
-# ---------------------------
-st.markdown('<div class="topbar">', unsafe_allow_html=True)
-st.markdown('<div class="brand">💻 Laptop Price AI</div>', unsafe_allow_html=True)
+# =========================================================================================
+# PAGE 1: DASHBOARD
+# =========================================================================================
+if page == "📊 Dashboard":
+    st.title("📊 Laptop Price Prediction Dashboard")
+    st.markdown("### Futuristic overview of model performance")
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
 
-# Navigation buttons
-nav_buttons_html = '<div class="nav-container">'
-pages = ["Dashboard", "Price Predictor", "Model Insights"]
-if "page" not in st.session_state:
-    st.session_state.page = "Dashboard"
-for p in pages:
-    active = "active" if st.session_state.page == p else ""
-    nav_buttons_html += f'<button class="nav-btn {active}" onclick="window.location.search=\'?page={p}\'">{p}</button>'
-nav_buttons_html += "</div>"
-st.markdown(nav_buttons_html, unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
+    acc_df = pd.DataFrame(accuracies).T.reset_index().rename(columns={'index': 'Model'})
 
-# Page selection
-query_params = st.experimental_get_query_params()
-if "page" in query_params:
-    st.session_state.page = query_params["page"][0]
-page = st.session_state.page
+    col1, col2, col3 = st.columns(3)
+    best_r2_model = max(accuracies, key=lambda x: accuracies[x]['R2'])
+    lowest_mae_model = min(accuracies, key=lambda x: accuracies[x]['MAE'])
 
-# ---------------------------
-# Page Routing
-# ---------------------------
-if page == "Dashboard":
-    st.header("📊 Model Performance Overview")
-    st.write("Comprehensive summary of model accuracy and errors.")
-    st.markdown("---")
-    # KPIs
-    best_model = max(accuracies, key=lambda k: accuracies[k]["R2"])
-    best_r2 = accuracies[best_model]["R2"]
-    best_mae_model = min(accuracies, key=lambda k: accuracies[k]["MAE"])
-    avg_r2 = np.mean([v["R2"] for v in accuracies.values()])
-
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        mk_metric_card("Best Model", best_model, f"R² Score: {best_r2:.2f}")
-    with k2:
-        mk_metric_card("Lowest MAE", best_mae_model, f"MAE: ₹{accuracies[best_mae_model]['MAE']:,}")
-    with k3:
-        mk_metric_card("Total Models", f"{len(models)}", "ML algorithms available")
-    with k4:
-        mk_metric_card("Avg R²", f"{avg_r2:.2f}", "Mean R² Score")
-    st.markdown("---")
-
-    # R² and MAE charts
-    r2_df = pd.DataFrame({
-        "Model": list(accuracies.keys()),
-        "R2": [v["R2"] for v in accuracies.values()],
-        "MAE": [v["MAE"] for v in accuracies.values()]
-    }).sort_values("R2", ascending=False)
-
-    col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**R² Score Ranking**")
-        fig_r2 = px.bar(r2_df, x="R2", y="Model", orientation="h", text="R2", color_discrete_sequence=["#0055CC"])
-        fig_r2.update_traces(texttemplate='%{x:.2f}', textposition='outside')
-        st.plotly_chart(fig_r2, use_container_width=True)
+        st.metric("🏆 Best Model", best_r2_model, f"{accuracies[best_r2_model]['R2']:.2f}")
     with col2:
-        st.markdown("**Mean Absolute Error**")
-        fig_mae = px.bar(r2_df, x="MAE", y="Model", orientation="h", text="MAE", color_discrete_sequence=["#003366"])
-        fig_mae.update_traces(texttemplate='₹%{x:,}', textposition='outside')
-        st.plotly_chart(fig_mae, use_container_width=True)
+        st.metric("📉 Lowest MAE", lowest_mae_model, f"₹{accuracies[lowest_mae_model]['MAE']:,}")
+    with col3:
+        st.metric("🤖 Total Models", len(models))
 
-    # Detailed Model Cards
-    st.subheader("Detailed Model Analysis")
-    st.markdown("<div class='model-grid'>", unsafe_allow_html=True)
-    for m in r2_df["Model"]:
-        r2 = accuracies[m]["R2"]
-        mae = accuracies[m]["MAE"]
-        badge = "Best" if r2 >= 0.9 else "Good" if r2 >= 0.85 else "Fair"
-        card_html = f"""
-            <div class="model-card">
-                <div style='display:flex;justify-content:space-between;align-items:center'>
-                    <div class='model-title'>{m}</div>
-                    <div class='badge'>{badge}</div>
-                </div>
-                <div style='margin-top:12px;color:var(--muted)'>R² Score: <b>{r2:.2f}</b></div>
-                <div style='color:var(--muted); margin-top:6px'>MAE: <b>₹{mae:,}</b></div>
-                <div style='margin-top:10px'>
-                    <div style='background:#f1f5f9; height:10px; border-radius:8px;'>
-                        <div style='width:{int(r2*100)}%; background:linear-gradient(90deg,#0055CC,#003366); height:10px; border-radius:8px;'></div>
-                    </div>
-                </div>
-            </div>
-        """
-        st.markdown(card_html, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-elif page == "Price Predictor":
-    st.header("🔮 Price Predictor")
-    st.markdown("Configure laptop specs and predict price using multiple ML models.")
-    left_col, right_col = st.columns([1, 1.1])
+    # Radar Chart (Model R² Comparison)
+    st.subheader("🌐 Model Accuracy Radar")
+    radar_fig = go.Figure()
+    radar_fig.add_trace(go.Scatterpolar(
+        r=acc_df['R2'],
+        theta=acc_df['Model'],
+        fill='toself',
+        name='R² Scores',
+        line=dict(color='#00f5ff')
+    ))
+    radar_fig.update_layout(template="plotly_dark", polar=dict(radialaxis=dict(visible=True, range=[0,1])))
+    st.plotly_chart(radar_fig, use_container_width=True)
 
-    with left_col:
-        st.markdown("<div class='main-card'>", unsafe_allow_html=True)
-        st.subheader("Laptop Specifications")
-        company = st.selectbox('Brand', df['Company'].unique())
-        laptop_type = st.selectbox('Type', df['TypeName'].unique())
-        ram = st.selectbox('RAM (GB)', sorted(df['Ram'].unique()))
-        weight = st.slider('Weight (kg)', min_value=0.5, max_value=5.0, value=1.5, step=0.1)
-        touchscreen = st.radio('Touchscreen', ['No', 'Yes'], horizontal=True)
-        ips = st.radio('IPS display', ['No', 'Yes'], horizontal=True)
-        screen_size = st.slider('Screen Size (inches)', 10.0, 18.0, 13.3, 0.1)
-        resolution = st.selectbox('Resolution', ['1920x1080','1366x768','1600x900','3840x2160','3200x1800','2880x1800','2560x1600','2560x1440','2304x1440'])
-        cpu = st.selectbox('CPU', df['Cpu brand'].unique())
-        gpu = st.selectbox('GPU', df['Gpu brand'].unique())
-        hdd = st.selectbox('HDD (GB)', [0,128,256,512,1024,2048])
-        ssd = st.selectbox('SSD (GB)', [0,8,128,256,512,1024])
-        os = st.selectbox('Operating System', df['os'].unique())
-        st.markdown("</div>", unsafe_allow_html=True)
+    # 3D Bubble Chart (R² vs MAE vs Model)
+    st.subheader("🔮 Model Performance 3D Visualization")
+    bubble_fig = px.scatter_3d(
+        acc_df,
+        x='R2', y='MAE', z='Model',
+        color='R2',
+        size='MAE',
+        symbol='Model',
+        color_continuous_scale='Viridis',
+    )
+    bubble_fig.update_traces(marker=dict(opacity=0.85))
+    bubble_fig.update_layout(template="plotly_dark", height=520)
+    st.plotly_chart(bubble_fig, use_container_width=True)
 
-    with right_col:
-        st.markdown("<div class='main-card'>", unsafe_allow_html=True)
-        st.subheader("Detailed ML Predictions")
-        st.markdown("<div style='color:var(--muted)'>Average predicted price and model-by-model breakdown</div>")
-        if st.button("Predict Price"):
-            ts = 1 if touchscreen == 'Yes' else 0
-            ips_v = 1 if ips == 'Yes' else 0
-            ppi = calc_ppi(resolution, screen_size)
-            query = pd.DataFrame([[company, laptop_type, ram, weight, ts, ips_v, ppi, cpu, hdd, ssd, gpu, os]],
-                                 columns=['Company','TypeName','Ram','Weight','Touchscreen','Ips','ppi','Cpu brand','HDD','SSD','Gpu brand','os'])
-            with st.spinner("Running predictions across models..."):
-                predictions = predict_all(models, query)
-            preds_df = pd.DataFrame(list(predictions.items()), columns=['Model','Price']).dropna().sort_values('Price', ascending=False).reset_index(drop=True)
-            avg_price = int(preds_df['Price'].mean())
-            st.markdown(f"**Average:** ₹{avg_price:,}")
-            st.markdown("")
-            highest = preds_df.iloc[0]
-            lowest = preds_df.iloc[-1]
-            st.markdown(f"**Highest prediction:** {highest['Model']} → ₹{highest['Price']:,}")
-            st.markdown(f"**Lowest prediction:** {lowest['Model']} → ₹{lowest['Price']:,}")
-            st.markdown("---")
-            for idx, row in preds_df.iterrows():
-                m = row['Model']; price = row['Price']; r2 = accuracies[m]['R2']; mae = accuracies[m]['MAE']
-                percent_from_avg = ((price - avg_price) / avg_price) * 100
-                percent_label = f"{percent_from_avg:+.1f}% vs avg"
-                card_html = f"""
-                    <div class='model-card'>
-                      <div style='display:flex;justify-content:space-between;align-items:center'>
-                        <div style='font-weight:700'>{idx+1}. {m}</div>
-                        <div style='text-align:right'>
-                          <div style='font-size:18px; font-weight:700'>₹{price:,}</div>
-                          <div style='color:var(--muted); font-size:12px'>{percent_label}</div>
-                        </div>
-                      </div>
-                      <div style='margin-top:8px;'>
-                        <span class='small-muted'>R²: <b>{r2:.2f}</b> &nbsp;&nbsp; MAE: <b>₹{mae:,}</b></span>
-                        <div style='height:8px; background:#f1f5f9; border-radius:8px; margin-top:8px'>
-                          <div style='width:{int(r2*100)}%; background:linear-gradient(90deg,#0055CC,#003366); height:8px;border-radius:8px;'></div>
-                        </div>
-                      </div>
-                    </div>
-                """
-                st.markdown(card_html, unsafe_allow_html=True)
-            fig_price = px.bar(preds_df, x='Model', y='Price', text='Price', title="Model-wise Predicted Price", color_discrete_sequence=["#0055CC"])
-            fig_price.update_traces(texttemplate='₹%{y:,}', textposition='outside')
-            fig_price.update_layout(margin=dict(t = 30, b = 0, l = 0, r = 0))
-            st.plotly_chart(fig_price, use_container_width=True)
-        else:
-            st.info("Configure laptop specs and click 'Predict Price' to see results.")
-        st.markdown("</div>", unsafe_allow_html=True)
+    # Gauge Chart for Best Model R²
+    st.subheader("⚡ Best Model Performance Indicator")
+    gauge_fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=accuracies[best_r2_model]['R2'] * 100,
+        title={'text': f"{best_r2_model} R² (%)"},
+        gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#00f5ff"}}
+    ))
+    gauge_fig.update_layout(template="plotly_dark", height=320)
+    st.plotly_chart(gauge_fig, use_container_width=True)
+
+# =========================================================================================
+# PAGE 2: PRICE PREDICTOR
+# =========================================================================================
+elif page == "🔮 Price Predictor":
+    st.title("🔮 Laptop Price Prediction")
+    st.markdown("### Enter laptop specifications below to predict price.")
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+
+    with st.container():
+        col1, col2 = st.columns(2)
+        with col1:
+            company = st.selectbox('🏢 Brand', df['Company'].unique())
+            laptop_type = st.selectbox('💼 Type', df['TypeName'].unique())
+            ram = st.selectbox('💾 RAM (GB)', sorted(df['Ram'].unique()))
+            weight = st.number_input('⚖️ Weight (kg)', min_value=0.5, max_value=5.0, step=0.1, value=1.5)
+            touchscreen = st.radio('🖐️ Touchscreen', ['No','Yes'], horizontal=True)
+            ips = st.radio('🖼️ IPS Display', ['No','Yes'], horizontal=True)
+
+        with col2:
+            screen_size = st.slider('📏 Screen Size (inches)', 10.0, 18.0, 15.6)
+            resolution = st.selectbox('🔳 Resolution', [
+                '1920x1080','1366x768','1600x900','3840x2160',
+                '3200x1800','2880x1800','2560x1600','2560x1440','2304x1440'
+            ])
+            cpu = st.selectbox('🖥️ CPU', df['Cpu brand'].unique())
+            hdd = st.selectbox('💽 HDD (GB)', sorted(df['HDD'].unique()))
+            ssd = st.selectbox('⚡ SSD (GB)', sorted(df['SSD'].unique()))
+            gpu = st.selectbox('🎮 GPU', df['Gpu brand'].unique())
+            os = st.selectbox('🖥️ Operating System', df['os'].unique())
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    if st.button("🔍 Predict Price"):
+        touchscreen_val = 1 if touchscreen == 'Yes' else 0
+        ips_val = 1 if ips == 'Yes' else 0
+        X_res, Y_res = map(int, resolution.split('x'))
+        ppi = ((X_res**2) + (Y_res**2))**0.5 / screen_size
+
+        query = pd.DataFrame([[company, laptop_type, ram, weight, touchscreen_val, ips_val,
+                               ppi, cpu, hdd, ssd, gpu, os]],
+                             columns=['Company','TypeName','Ram','Weight','Touchscreen','Ips',
+                                      'ppi','Cpu brand','HDD','SSD','Gpu brand','os'])
+
+        predictions = {}
+        for name, model in models.items():
+            # make sure model.predict returns log(price) as before
+            predictions[name] = int(np.exp(model.predict(query)[0]))
+
+        pred_df = pd.DataFrame(predictions.items(), columns=['Model', 'Predicted Price'])
+
+        # Treemap for Predictions
+        st.subheader("🌳 Predicted Prices Treemap")
+        tree_fig = px.treemap(pred_df, path=['Model'], values='Predicted Price',
+                              color='Predicted Price', color_continuous_scale='Viridis')
+        tree_fig.update_layout(template="plotly_dark", height=480)
+        st.plotly_chart(tree_fig, use_container_width=True)
+
+        # Animated-like line chart (with markers)
+        st.subheader("📈 Price Prediction Comparison")
+        line_fig = px.line(pred_df.sort_values('Predicted Price'), x='Model', y='Predicted Price',
+                           markers=True)
+        line_fig.update_traces(marker=dict(size=10), line=dict(width=3))
+        line_fig.update_layout(template="plotly_dark", height=420)
+        st.plotly_chart(line_fig, use_container_width=True)
+
+# =========================================================================================
+# PAGE 3: MODEL INSIGHTS
+# =========================================================================================
+elif page == "📈 Model Insights":
+    st.title("📈 Model Insights & Analysis")
+    acc_df = pd.DataFrame(accuracies).T.reset_index().rename(columns={'index': 'Model'})
+
+    # Heatmap for R² vs MAE
+    st.subheader("🔥 Model Performance Heatmap")
+    # Create matrix-like DataFrame for heatmap (R2 as columns, MAE as values) - approximate view
+    heat_df = acc_df.copy()
+    heat_df['R2_scaled'] = (heat_df['R2'] - heat_df['R2'].min()) / (heat_df['R2'].max() - heat_df['R2'].min())
+    heatmap_fig = px.imshow([heat_df['R2_scaled']], x=heat_df['Model'], y=["R² scaled"],
+                             color_continuous_scale='Viridis', aspect="auto")
+    heatmap_fig.update_layout(template="plotly_dark", height=220)
+    st.plotly_chart(heatmap_fig, use_container_width=True)
+
+    # Boxplot for Model Variability (though limited single-value per model, show as stylized)
+    st.subheader("📦 R² Score Distribution (stylized)")
+    box_fig = px.box(acc_df, y='R2', x='Model', color='Model')
+    box_fig.update_layout(template="plotly_dark", height=520, showlegend=False)
+    st.plotly_chart(box_fig, use_container_width=True)
+
+    # Donut Chart for Top 5 Models Contribution
+    st.subheader("🍩 Top 5 Models by R² Contribution")
+    top5 = acc_df.sort_values(by="R2", ascending=False).head(5)
+    donut_fig = px.pie(top5, values='R2', names='Model', hole=0.5,
+                       color_discrete_sequence=px.colors.sequential.Viridis)
+    donut_fig.update_layout(template="plotly_dark", height=420)
+    st.plotly_chart(donut_fig, use_container_width=True)
