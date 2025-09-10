@@ -6,6 +6,7 @@ import pickle
 import numpy as np
 import os
 from pathlib import Path
+import time
 
 # Custom color palette
 COLORS = {
@@ -163,6 +164,18 @@ def main():
         justify-content: center;
         font-weight: bold;
     }
+    .predict-button {
+        background: linear-gradient(90deg, #0055CC, #003366);
+        color: white;
+        border: none;
+        padding: 1rem 2rem;
+        border-radius: 10px;
+        font-size: 1.1rem;
+        font-weight: bold;
+        margin: 1rem 0;
+        width: 100%;
+        cursor: pointer;
+    }
     </style>
     """, unsafe_allow_html=True)
     
@@ -204,7 +217,7 @@ def main():
             st.markdown("""
             <div class="spec-section">
                 <h3>💻 Laptop Specifications</h3>
-                <p style="color: #666; margin-bottom: 1.5rem;">Configure your laptop specs and watch prices update instantly</p>
+                <p style="color: #666; margin-bottom: 1.5rem;">Configure your laptop specs and click predict to get price estimates</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -249,6 +262,14 @@ def main():
                         ['Integrated', 'Nvidia GTX', 'Nvidia RTX', 'AMD Radeon'],
                         index=0
                     )
+                
+                # Add the predict button
+                st.markdown("<br>", unsafe_allow_html=True)
+                predict_button = st.button(
+                    "🔮 Predict Laptop Price",
+                    type="primary",
+                    use_container_width=True
+                )
         
         with col2:
             st.markdown("""
@@ -257,56 +278,108 @@ def main():
             </div>
             """, unsafe_allow_html=True)
             
-            # Generate predictions
-            predictions, avg_price = predict_price(brand, laptop_type, ram, weight, touchscreen, ips_display, screen_size, cpu, gpu)
+            # Initialize session state for predictions if not exists
+            if 'predictions_made' not in st.session_state:
+                st.session_state.predictions_made = False
+                st.session_state.predictions = None
+                st.session_state.avg_price = None
             
-            # Average price display
-            st.markdown(f"""
-            <div style="text-align: center; margin: 1rem 0;">
-                <div style="color: #666; font-size: 0.9rem;">Average: ₹{avg_price:,.0f}</div>
-                <div style="color: #0055CC; font-size: 0.8rem;">🟣 Premium Range</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Model predictions with ranking
-            st.markdown(f"<div style='color: #666; font-size: 0.9rem; margin-bottom: 1rem;'>{len(predictions)} Models</div>", unsafe_allow_html=True)
-            
-            for i, (model_name, pred_data) in enumerate(predictions[:3]):  # Show top 3
-                rank = i + 1
-                price = pred_data['price']
-                r2 = pred_data['r2']
-                mae = pred_data['mae']
-                accuracy = pred_data['accuracy']
+            # Only generate predictions when button is clicked
+            if predict_button:
+                # Show loading spinner
+                with st.spinner('🤖 Running ML models... Please wait'):
+                    # Simulate some processing time for better UX
+                    time.sleep(1.5)
+                    
+                    # Generate predictions
+                    predictions, avg_price = predict_price(
+                        brand, laptop_type, ram, weight, touchscreen, 
+                        ips_display, screen_size, cpu, gpu
+                    )
+                    
+                    # Store in session state
+                    st.session_state.predictions = predictions
+                    st.session_state.avg_price = avg_price
+                    st.session_state.predictions_made = True
                 
-                # Determine rank badge color
-                if rank == 1:
-                    badge_color = "#FF6B35"  # Orange for highest
-                else:
-                    badge_color = "#0055CC"
+                # Show success message
+                st.success("✅ Predictions generated successfully!")
+            
+            # Display predictions if they exist
+            if st.session_state.predictions_made and st.session_state.predictions:
+                predictions = st.session_state.predictions
+                avg_price = st.session_state.avg_price
                 
+                # Average price display
                 st.markdown(f"""
-                <div style="display: flex; align-items: center; background: #F5F6F9; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem;">
-                    <div style="background: {badge_color}; color: white; border-radius: 50%; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 1rem; font-size: 0.9rem;">
-                        {rank}
-                    </div>
-                    <div style="flex: 1;">
-                        <div style="font-weight: bold; color: #1C1C1C; margin-bottom: 0.2rem;">{model_name}</div>
-                        <div style="font-size: 0.8rem; color: #666;">R²: {r2:.2f} • MAE: ₹{mae:,}</div>
-                        <div style="color: #666; font-size: 0.8rem;">Model Accuracy</div>
-                        <div style="width: 100%; background: #E0E0E0; border-radius: 10px; height: 6px; margin: 0.3rem 0;">
-                            <div style="width: {accuracy}%; background: #0055CC; height: 6px; border-radius: 10px;"></div>
-                        </div>
-                    </div>
-                    <div style="text-align: right; margin-left: 1rem;">
-                        <div style="font-weight: bold; font-size: 1.1rem; color: #1C1C1C;">₹{price:,.0f}</div>
-                        <div style="font-size: 0.7rem; color: #666;">+0.7% vs avg</div>
-                    </div>
+                <div style="text-align: center; margin: 1rem 0;">
+                    <div style="color: #666; font-size: 0.9rem;">Average: ₹{avg_price:,.0f}</div>
+                    <div style="color: #0055CC; font-size: 0.8rem;">🟣 Premium Range</div>
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Add "Highest" badge for rank 1
-                if rank == 1:
-                    st.markdown('<div style="text-align: center; margin: 0.5rem 0;"><span style="background: #FF6B35; color: white; padding: 0.2rem 0.8rem; border-radius: 12px; font-size: 0.7rem;">🏆 Highest</span></div>', unsafe_allow_html=True)
+                # Model predictions with ranking
+                st.markdown(f"<div style='color: #666; font-size: 0.9rem; margin-bottom: 1rem;'>{len(predictions)} Models</div>", unsafe_allow_html=True)
+                
+                for i, (model_name, pred_data) in enumerate(predictions[:3]):  # Show top 3
+                    rank = i + 1
+                    price = pred_data['price']
+                    r2 = pred_data['r2']
+                    mae = pred_data['mae']
+                    accuracy = pred_data['accuracy']
+                    
+                    # Determine rank badge color
+                    if rank == 1:
+                        badge_color = "#FF6B35"  # Orange for highest
+                    else:
+                        badge_color = "#0055CC"
+                    
+                    st.markdown(f"""
+                    <div style="display: flex; align-items: center; background: #F5F6F9; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem;">
+                        <div style="background: {badge_color}; color: white; border-radius: 50%; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 1rem; font-size: 0.9rem;">
+                            {rank}
+                        </div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: bold; color: #1C1C1C; margin-bottom: 0.2rem;">{model_name}</div>
+                            <div style="font-size: 0.8rem; color: #666;">R²: {r2:.2f} • MAE: ₹{mae:,}</div>
+                            <div style="color: #666; font-size: 0.8rem;">Model Accuracy</div>
+                            <div style="width: 100%; background: #E0E0E0; border-radius: 10px; height: 6px; margin: 0.3rem 0;">
+                                <div style="width: {accuracy}%; background: #0055CC; height: 6px; border-radius: 10px;"></div>
+                            </div>
+                        </div>
+                        <div style="text-align: right; margin-left: 1rem;">
+                            <div style="font-weight: bold; font-size: 1.1rem; color: #1C1C1C;">₹{price:,.0f}</div>
+                            <div style="font-size: 0.7rem; color: #666;">+0.7% vs avg</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Add "Highest" badge for rank 1
+                    if rank == 1:
+                        st.markdown('<div style="text-align: center; margin: 0.5rem 0;"><span style="background: #FF6B35; color: white; padding: 0.2rem 0.8rem; border-radius: 12px; font-size: 0.7rem;">🏆 Highest</span></div>', unsafe_allow_html=True)
+                
+                # Show all models button
+                if len(predictions) > 3:
+                    if st.button("View All Models", type="secondary"):
+                        st.markdown("### All Model Predictions")
+                        for i, (model_name, pred_data) in enumerate(predictions):
+                            rank = i + 1
+                            price = pred_data['price']
+                            r2 = pred_data['r2']
+                            mae = pred_data['mae']
+                            
+                            st.markdown(f"""
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid #E0E0E0;">
+                                <div>
+                                    <span style="font-weight: bold;">{rank}. {model_name}</span><br>
+                                    <span style="font-size: 0.8rem; color: #666;">R²: {r2:.2f} • MAE: ₹{mae:,}</span>
+                                </div>
+                                <div style="font-weight: bold; font-size: 1.1rem; color: #1C1C1C;">₹{price:,.0f}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+            else:
+                # Show placeholder message when no predictions have been made
+                st.info("👆 Configure your laptop specifications and click the 'Predict Laptop Price' button to see AI-powered price predictions from multiple machine learning models.")
     
     with tab3:
         st.subheader("📊 Model Performance Insights")
@@ -316,81 +389,166 @@ def main():
         r2_scores = [MODEL_CONFIGS[model]['r2'] for model in model_names]
         mae_scores = [MODEL_CONFIGS[model]['mae'] for model in model_names]
         
+        # R² Score comparison
         col1, col2 = st.columns(2)
         
         with col1:
-            fig1 = px.bar(
-                x=model_names, 
+            fig_r2 = px.bar(
+                x=model_names,
                 y=r2_scores,
-                title="Model R² Scores",
-                color_discrete_sequence=[COLORS['primary']]
+                title="Model R² Scores (Higher is Better)",
+                labels={'x': 'Models', 'y': 'R² Score'},
+                color=r2_scores,
+                color_continuous_scale='Blues'
             )
-            fig1.update_layout(
-                xaxis_tickangle=-45,
-                height=400,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)'
-            )
-            st.plotly_chart(fig1, use_container_width=True)
+            fig_r2.update_layout(height=400, showlegend=False, xaxis_tickangle=45)
+            st.plotly_chart(fig_r2, use_container_width=True)
         
         with col2:
-            fig2 = px.bar(
-                x=model_names, 
+            fig_mae = px.bar(
+                x=model_names,
                 y=mae_scores,
-                title="Model MAE (Lower is Better)",
-                color_discrete_sequence=[COLORS['chart_fill']]
+                title="Model MAE Scores (Lower is Better)",
+                labels={'x': 'Models', 'y': 'Mean Absolute Error (₹)'},
+                color=mae_scores,
+                color_continuous_scale='Reds_r'
             )
-            fig2.update_layout(
-                xaxis_tickangle=-45,
-                height=400,
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)'
-            )
-            st.plotly_chart(fig2, use_container_width=True)
+            fig_mae.update_layout(height=400, showlegend=False, xaxis_tickangle=45)
+            st.plotly_chart(fig_mae, use_container_width=True)
         
-        # Model details table
-        st.subheader("Model Performance Details")
+        # Model comparison table
+        st.subheader("Detailed Model Comparison")
+        
         model_df = pd.DataFrame([
-            {'Model': model, 'R² Score': config['r2'], 'MAE': config['mae'], 'Accuracy': f"{config['r2']*100:.1f}%"}
-            for model, config in MODEL_CONFIGS.items()
+            {
+                'Model': name,
+                'R² Score': config['r2'],
+                'MAE (₹)': f"₹{config['mae']:,}",
+                'Accuracy (%)': f"{int(config['r2'] * 100)}%"
+            }
+            for name, config in MODEL_CONFIGS.items()
         ])
-        st.dataframe(model_df, use_container_width=True)
+        
+        # Sort by R² score
+        model_df = model_df.sort_values('R² Score', ascending=False)
+        st.dataframe(model_df, use_container_width=True, hide_index=True)
+        
+        # Performance insights
+        st.markdown("### 🎯 Key Insights")
+        
+        best_model = max(MODEL_CONFIGS.items(), key=lambda x: x[1]['r2'])
+        lowest_mae = min(MODEL_CONFIGS.items(), key=lambda x: x[1]['mae'])
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric(
+                "Best R² Score",
+                f"{best_model[1]['r2']:.2f}",
+                f"{best_model[0]}"
+            )
+        
+        with col2:
+            st.metric(
+                "Lowest MAE",
+                f"₹{lowest_mae[1]['mae']:,}",
+                f"{lowest_mae[0]}"
+            )
+        
+        with col3:
+            avg_r2 = np.mean([config['r2'] for config in MODEL_CONFIGS.values()])
+            st.metric(
+                "Average R²",
+                f"{avg_r2:.2f}",
+                "Across all models"
+            )
     
     with tab4:
         st.subheader("📈 Data Overview")
         
-        # Available model files
-        available_files = load_available_models()
+        # Sample data based on the screenshot
+        st.markdown("### Dataset Information")
         
-        if available_files:
-            st.success(f"Found {len(available_files)} model files")
-            for file in available_files:
-                st.write(f"• {file}")
-        else:
-            st.info("No model files (.pkl or .joblib) found in the current directory.")
-            st.write("Expected model files:")
-            expected_files = [
-                'Ada_boost.pkl', 'Decision_tree.pkl', 'Gradient_boost.pkl',
-                'KNN_reg.pkl', 'lasso_reg.pkl', 'RF_reg.pkl', 'Random_forest.pkl',
-                'Updated_Laptop_Prediction.joblib', 'xg_boost.pkl'
-            ]
-            for file in expected_files:
-                st.write(f"• {file}")
+        # Create sample data structure based on the visible columns in screenshot
+        sample_data = {
+            'Company': ['Apple', 'Apple', 'Apple', 'Apple', 'Apple', 'Lenovo', 'Lenovo', 'HP', 'Asus'],
+            'TypeName': ['Ultrabook', 'Ultrabook', 'Notebook', 'Ultrabook', 'Ultrabook', '2 in 1 Convertible', '2 in 1 Convertible', 'Notebook', 'Notebook'],
+            'Ram': [8, 8, 8, 16, 8, 4, 16, 6, 4],
+            'Weight': [1.37, 1.34, 1.86, 1.83, 1.37, 1.80, 1.30, 2.19, 2.20],
+            'Price': [71378.6832, 47895.5232, 38619.0000, 135195.3360, 96095.8080, 33992.6400, 79866.7200, 40705.9200, 19660.3200],
+            'Touchscreen': [0, 0, 0, 1, 0, 1, 1, 0, 0],
+            'Ips': [1, 0, 0, 1, 1, 1, 1, 0, 0],
+            'ppi': [226.983005, 127.677300, 141.210798, 220.534624, 226.983005, 157.350512, 276.053530, 100.454670, 100.454670],
+            'Cpu brand': ['Intel Core i5', 'Intel Core i5', 'Intel Core i5', 'Intel Core i7', 'Intel Core i5', 'Intel Core i7', 'Intel Core i7', 'Other Intel Processor', 'Other Intel Processor'],
+            'HDD': [0, 0, 0, 0, 0, 0, 0, 1000, 500],
+            'SSD': [128, 0, 256, 512, 256, 128, 512, 0, 0],
+            'Gpu brand': ['Intel', 'Intel', 'Intel', 'AMD', 'Intel', 'Intel', 'Intel', 'AMD', 'Intel'],
+            'os': ['Mac', 'Mac', 'Others/No OS/Linux', 'Mac', 'Mac', 'Windows', 'Windows', 'Windows', 'Windows']
+        }
         
-        st.markdown("---")
-        st.subheader("Dataset Information")
-        st.write("""
-        **Features used for prediction:**
-        - Brand (Apple, HP, Dell, Lenovo, Asus, etc.)
-        - Type (Ultrabook, Gaming, 2-in-1 Convertible, etc.)
-        - RAM (4GB to 64GB)
-        - Weight (0.5kg to 5.0kg)
-        - Touchscreen (Yes/No)
-        - IPS Display (Yes/No)
-        - Screen Size (10" to 18")
-        - CPU (Intel i3/i5/i7/i9, AMD Ryzen series)
-        - GPU (Integrated, Nvidia GTX/RTX, AMD Radeon)
-        """)
+        df = pd.DataFrame(sample_data)
+        
+        # Display dataset info
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Rows", "1,303", "Sample shown: 9")
+        
+        with col2:
+            st.metric("Total Columns", "13", "Features")
+        
+        with col3:
+            st.metric("Companies", len(df['Company'].unique()), "Brands")
+        
+        with col4:
+            avg_price = df['Price'].mean()
+            st.metric("Avg Price", f"₹{avg_price:,.0f}", "INR")
+        
+        # Show sample data
+        st.markdown("### Sample Data")
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        # Data distribution charts
+        st.markdown("### Data Distribution")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Price distribution
+            fig_price = px.histogram(
+                df, 
+                x='Price', 
+                title='Price Distribution',
+                nbins=20,
+                color_discrete_sequence=['#0055CC']
+            )
+            fig_price.update_layout(height=300)
+            st.plotly_chart(fig_price, use_container_width=True)
+        
+        with col2:
+            # Brand distribution
+            brand_counts = df['Company'].value_counts()
+            fig_brand = px.pie(
+                values=brand_counts.values,
+                names=brand_counts.index,
+                title='Brand Distribution'
+            )
+            fig_brand.update_layout(height=300)
+            st.plotly_chart(fig_brand, use_container_width=True)
+        
+        # Feature correlations
+        st.markdown("### Feature Analysis")
+        
+        # RAM vs Price
+        fig_ram = px.scatter(
+            df,
+            x='Ram',
+            y='Price',
+            color='Company',
+            title='RAM vs Price Relationship',
+            labels={'Ram': 'RAM (GB)', 'Price': 'Price (₹)'}
+        )
+        st.plotly_chart(fig_ram, use_container_width=True)
 
 if __name__ == "__main__":
     main()

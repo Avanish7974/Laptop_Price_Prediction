@@ -315,30 +315,47 @@ if page == "📊 Dashboard":
             f"Models loaded: {len(models)}"
         )
 
-    # Enhanced Performance Matrix
-    st.markdown('<h2 class="section-header">📊 Comprehensive Performance Matrix</h2>', unsafe_allow_html=True)
+    # Top Models Performance Pie Chart
+    st.markdown('<h2 class="section-header">🏆 Top 4 Model Performance</h2>', unsafe_allow_html=True)
     
-    # Create performance DataFrame
-    performance_data = []
-    for model_name, metrics in accuracies.items():
-        performance_data.append({
+    # Get top 4 models by R² score
+    sorted_models = sorted(accuracies.items(), key=lambda x: x[1]['R2'], reverse=True)[:4]
+    
+    # Create pie chart data
+    model_names = [model[0] for model in sorted_models]
+    r2_scores = [model[1]['R2'] for model in sorted_models]
+    
+    # Create pie chart using Plotly
+    fig_pie = px.pie(
+        values=r2_scores,
+        names=model_names,
+        title="Top 4 Models by R² Score Performance",
+        color_discrete_sequence=px.colors.qualitative.Set3
+    )
+    
+    fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+    fig_pie.update_layout(
+        height=500,
+        title_x=0.5,
+        font=dict(size=12),
+        showlegend=True
+    )
+    
+    st.plotly_chart(fig_pie, use_container_width=True)
+    
+    # Display top 4 models details in a clean table
+    top_models_data = []
+    for model_name, metrics in sorted_models:
+        top_models_data.append({
+            'Rank': len(top_models_data) + 1,
             'Model': model_name,
-            'R² Score': metrics['R2'],
-            'MAE (₹)': metrics['MAE'],
+            'R² Score': f"{metrics['R2']:.3f}",
+            'MAE (₹)': f"₹{metrics['MAE']:,}",
             'Status': '✅ Loaded' if model_name in models else '❌ Missing'
         })
     
-    performance_df = pd.DataFrame(performance_data)
-    
-    # Display performance table
-    st.dataframe(
-        performance_df.style.format({
-            'R² Score': '{:.3f}',
-            'MAE (₹)': '{:,}'
-        }).background_gradient(subset=['R² Score'], cmap='RdYlGn')
-        .background_gradient(subset=['MAE (₹)'], cmap='RdYlGn_r'),
-        use_container_width=True
-    )
+    top_models_df = pd.DataFrame(top_models_data)
+    st.dataframe(top_models_df, use_container_width=True, hide_index=True)
 
     # Charts Section
     st.markdown('<h2 class="section-header">📈 Advanced Analytics Visualizations</h2>', unsafe_allow_html=True)
@@ -545,13 +562,13 @@ elif page == "🔮 Price Predictor":
                 "Apple": 2.5, "Dell": 1.2, "HP": 1.1, "Lenovo": 1.0, 
                 "Asus": 1.15, "Acer": 0.9, "MSI": 1.3
             }
-            brand_mult = brand_multipliers.get(brand, 1.0)
+            brand_mult = brand_multipliers.get(str(brand), 1.0)
             
             # Type multiplier
             type_multipliers = {
                 "Gaming": 1.5, "Workstation": 1.4, "Ultrabook": 1.3, "Notebook": 1.0
             }
-            type_mult = type_multipliers.get(laptop_type, 1.0)
+            type_mult = type_multipliers.get(str(laptop_type), 1.0)
             
             # Component calculations
             ram_price = ram * 1500
@@ -600,7 +617,7 @@ elif page == "🔮 Price Predictor":
                 
                 # Prediction confidence
                 std_dev = np.std(list(predictions.values()))
-                confidence = max(0, 100 - (std_dev / avg_prediction * 100))
+                confidence = max(0.0, 100 - (std_dev / avg_prediction * 100))
                 
                 st.progress(confidence / 100)
                 st.write(f"Prediction Confidence: {confidence:.1f}%")
@@ -691,9 +708,10 @@ elif page == "📈 Model Insights":
     features = list(feature_importance.keys())
     importance = list(feature_importance.values())
     
-    fig = px.horizontal_bar(
+    fig = px.bar(
         x=importance,
         y=features,
+        orientation='h',
         title="Feature Importance in Price Prediction",
         labels={'x': 'Importance Score', 'y': 'Features'},
         color=importance,
